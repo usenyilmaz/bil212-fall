@@ -49,11 +49,15 @@ public class TreeMap<K,V> extends AbstractSortedMap<K,V> {
     // this extends the inherited LinkedBinaryTree.Node class
     protected static class BSTNode<E> extends Node<E> {
       int aux=0;
+      // size of subtree rooted at this node (count of internal nodes)
+      int size = 0;
       BSTNode(E e, Node<E> parent, Node<E> leftChild, Node<E> rightChild) {
         super(e, parent, leftChild, rightChild);
       }
       public int getAux() { return aux; }
       public void setAux(int value) { aux = value; }
+      public int getSize() { return size; }
+      public void setSize(int value) { size = value; }
     } //--------- end of nested BSTNode class ---------
 
     // positional-based methods related to aux field
@@ -63,6 +67,15 @@ public class TreeMap<K,V> extends AbstractSortedMap<K,V> {
 
     public void setAux(Position<Entry<K,V>> p, int value) {
       ((BSTNode<Entry<K,V>>) p).setAux(value);
+    }
+
+    // positional-based methods related to size field
+    public int getSize(Position<Entry<K,V>> p) {
+      return ((BSTNode<Entry<K,V>>) p).getSize();
+    }
+
+    public void setSize(Position<Entry<K,V>> p, int value) {
+      ((BSTNode<Entry<K,V>>) p).setSize(value);
     }
 
     // Override node factory function to produce a BSTNode (rather than a Node)
@@ -184,6 +197,14 @@ public class TreeMap<K,V> extends AbstractSortedMap<K,V> {
     tree.set(p, entry);            // store new entry at p
     tree.addLeft(p, null);         // add new sentinel leaves as children
     tree.addRight(p, null);
+    // set size for this new internal node and update ancestors
+    tree.setSize(p, 1);
+    Position<Entry<K,V>> walk = parent(p);
+    while (walk != null) {
+      // only internal nodes count; sentinel leaves are external and have size 0
+      tree.setSize(walk, tree.getSize(walk) + 1);
+      walk = parent(walk);
+    }
   }
 
 
@@ -305,8 +326,16 @@ public class TreeMap<K,V> extends AbstractSortedMap<K,V> {
       } // now p has at most one child that is an internal node
       Position<Entry<K,V>> leaf = (isExternal(left(p)) ? left(p) : right(p));
       Position<Entry<K,V>> sib = sibling(leaf);
+      // record ancestor to update sizes (all internal ancestors lose one internal node)
+      Position<Entry<K,V>> ancestor = parent(p);
       remove(leaf);
       remove(p);                            // sib is promoted in p's place
+      // decrement size by 1 for each internal ancestor
+      Position<Entry<K,V>> w = ancestor;
+      while (w != null) {
+        tree.setSize(w, tree.getSize(w) - 1);
+        w = parent(w);
+      }
       rebalanceDelete(sib);                 // hook for balanced tree subclasses
       return old;
     }
@@ -500,7 +529,7 @@ public class TreeMap<K,V> extends AbstractSortedMap<K,V> {
     if (isExternal(p))
       System.out.println(indent + "leaf");
     else {
-      System.out.println(indent + p.getElement());
+      System.out.println(indent + p.getElement() + "  size=" + tree.getSize(p));
       dumpRecurse(left(p), depth+1);
       dumpRecurse(right(p), depth+1);
     }
@@ -545,10 +574,11 @@ public class TreeMap<K,V> extends AbstractSortedMap<K,V> {
 
   private void displayRecursive(Position<Entry<K,V>> p, int depth) {
     if (isExternal(p)) return;
-    displayRecursive(right(p), depth + 1);
+    // preorder: print node, then left, then right; indent by depth
     for (int i = 0; i < depth; i++) System.out.print("    ");
-    System.out.println(p.getElement().getKey());
+    System.out.println(p.getElement().getKey() + " (size=" + tree.getSize(p) + ")");
     displayRecursive(left(p), depth + 1);
+    displayRecursive(right(p), depth + 1);
   }
 
 
